@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useTasks } from "@/hooks/useTasks";
 import { useStudySessions } from "@/hooks/useStudySessions";
-import { Lightbulb, TrendingUp, TrendingDown, Clock, Star, AlertTriangle } from "lucide-react";
+import { Lightbulb, TrendingUp, TrendingDown, Clock, Star, AlertTriangle, Quote } from "lucide-react";
 
 interface Insight {
   icon: React.ElementType;
@@ -10,13 +10,27 @@ interface Insight {
   type: "positive" | "warning" | "tip";
 }
 
+const motivationalQuotes = [
+  { text: "The only way to do great work is to love what you do.", author: "Steve Jobs" },
+  { text: "It always seems impossible until it's done.", author: "Nelson Mandela" },
+  { text: "Don't count the days, make the days count.", author: "Muhammad Ali" },
+  { text: "Success is not final, failure is not fatal: it is the courage to continue that counts.", author: "Winston Churchill" },
+  { text: "The future belongs to those who believe in the beauty of their dreams.", author: "Eleanor Roosevelt" },
+  { text: "Education is the most powerful weapon which you can use to change the world.", author: "Nelson Mandela" },
+];
+
+function getRotatingQuote() {
+  const idx = Math.floor(Date.now() / 86400000) % motivationalQuotes.length;
+  return motivationalQuotes[idx];
+}
+
 export default function Insights() {
   const { data: tasks } = useTasks();
   const { data: sessions } = useStudySessions();
+  const quote = getRotatingQuote();
 
   const insights: Insight[] = [];
 
-  // Analyze study sessions by hour
   if (sessions && sessions.length > 0) {
     const hourCounts: Record<number, number> = {};
     sessions.forEach((s) => {
@@ -29,21 +43,23 @@ export default function Insights() {
       const period = h < 12 ? "morning" : h < 17 ? "afternoon" : "evening";
       insights.push({
         icon: Star,
-        title: `You're most productive in the ${period}`,
+        title: `You are more productive in the ${period}`,
         description: `Your peak study time is around ${h > 12 ? h - 12 : h}:00 ${h >= 12 ? "PM" : "AM"}. Schedule important tasks during this time for best results.`,
         type: "positive",
       });
     }
 
-    // Check for late-night sessions
     const lateMinutes = sessions
-      .filter((s) => new Date(s.started_at).getHours() >= 22)
+      .filter((s) => {
+        const hour = new Date(s.started_at).getHours();
+        return hour >= 21;
+      })
       .reduce((a, s) => a + s.duration_minutes, 0);
     if (lateMinutes > 60) {
       insights.push({
         icon: AlertTriangle,
-        title: "Your productivity drops after 10 PM",
-        description: "You have significant late-night study sessions. Research shows focus declines after 10 PM. Consider shifting to earlier hours.",
+        title: "Your productivity drops after 9 PM",
+        description: "You have significant late-night study sessions. Research shows focus declines after 9 PM. Consider shifting to earlier hours.",
         type: "warning",
       });
     }
@@ -60,14 +76,13 @@ export default function Insights() {
     } else {
       insights.push({
         icon: Clock,
-        title: "Try increasing study time",
-        description: `You average ${(avgDaily / 60).toFixed(1)} hours per study day. Aim for at least 2 hours for better results.`,
+        title: "Try increasing daily study by 30 minutes",
+        description: `You average ${(avgDaily / 60).toFixed(1)} hours per study day. Adding just 30 minutes can significantly boost your results.`,
         type: "tip",
       });
     }
   }
 
-  // Task insights
   if (tasks && tasks.length > 0) {
     const completed = tasks.filter((t) => t.status === "completed").length;
     const rate = Math.round((completed / tasks.length) * 100);
@@ -125,6 +140,21 @@ export default function Insights() {
         <h1 className="text-3xl font-display font-bold">Smart Insights</h1>
         <p className="text-muted-foreground text-sm mt-1">Personalized tips to boost your productivity</p>
       </div>
+
+      {/* Motivational Quote */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="glass-card p-6 border-l-4 border-l-primary/40 relative overflow-hidden"
+      >
+        <div className="absolute -top-4 -right-4 opacity-5">
+          <Quote className="h-24 w-24" />
+        </div>
+        <div className="relative z-10">
+          <p className="text-lg font-display italic text-foreground">"{quote.text}"</p>
+          <p className="text-sm text-muted-foreground mt-2">— {quote.author}</p>
+        </div>
+      </motion.div>
 
       <div className="space-y-4">
         {insights.map((insight, i) => (

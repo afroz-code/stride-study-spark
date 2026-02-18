@@ -2,13 +2,14 @@ import { motion } from "framer-motion";
 import { useProfile } from "@/hooks/useProfile";
 import { useTasks } from "@/hooks/useTasks";
 import { useStudySessions } from "@/hooks/useStudySessions";
+import { CircularProgress, getProductivityScore, getGradeInfo } from "@/components/CircularProgress";
+import { StudyStreak, calculateStreak } from "@/components/StudyStreak";
+import { WeeklyGoal } from "@/components/WeeklyGoal";
 import {
   CheckCircle2,
   Clock,
-  Target,
-  TrendingUp,
-  Zap,
   ListTodo,
+  Zap,
 } from "lucide-react";
 import {
   BarChart,
@@ -28,6 +29,9 @@ const quotes = [
   "Don't watch the clock; do what it does. Keep going.",
   "Focus on being productive instead of busy.",
   "The only way to do great work is to love what you do.",
+  "It does not matter how slowly you go as long as you do not stop.",
+  "Believe you can and you're halfway there.",
+  "The future depends on what you do today.",
 ];
 
 function getQuote() {
@@ -55,13 +59,24 @@ export default function Dashboard() {
   const totalToday = todayTasks.length;
   const completionRate = totalToday > 0 ? Math.round((completedToday / totalToday) * 100) : 0;
 
-  const totalStudyMinutes = sessions?.reduce((acc, s) => acc + s.duration_minutes, 0) ?? 0;
   const todaySessions = sessions?.filter((s) => s.started_at.startsWith(todayStr)) ?? [];
   const todayStudyMinutes = todaySessions.reduce((acc, s) => acc + s.duration_minutes, 0);
 
-  const focusScore = Math.min(100, Math.round((todayStudyMinutes / 120) * 100));
+  // Weekly study hours for goal
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+  const weekStartStr = weekStart.toISOString().split("T")[0];
+  const weekStudyMinutes = sessions?.filter((s) => s.started_at >= weekStartStr).reduce((a, s) => a + s.duration_minutes, 0) ?? 0;
+  const weekStudyHours = weekStudyMinutes / 60;
 
-  // Weekly data for chart
+  // Streak
+  const streak = calculateStreak(sessions?.map((s) => s.started_at) ?? []);
+
+  // Productivity score
+  const score = getProductivityScore(todayStudyMinutes / 60, completionRate, streak);
+  const { grade, label, color } = getGradeInfo(score);
+
+  // Weekly chart data
   const weekData = Array.from({ length: 7 }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - (6 - i));
@@ -79,10 +94,15 @@ export default function Dashboard() {
   const stats = [
     { label: "Today's Tasks", value: totalToday, icon: ListTodo, color: "text-info" },
     { label: "Completed", value: completedToday, icon: CheckCircle2, color: "text-success" },
-    { label: "Study Hours", value: `${(todayStudyMinutes / 60).toFixed(1)}h`, icon: Clock, color: "text-primary" },
-    { label: "Focus Score", value: `${focusScore}%`, icon: Target, color: "text-accent" },
-    { label: "Productivity", value: `${completionRate}%`, icon: TrendingUp, color: "text-warning" },
+    { label: "Study Today", value: `${(todayStudyMinutes / 60).toFixed(1)}h`, icon: Clock, color: "text-primary" },
   ];
+
+  const tooltipStyle = {
+    backgroundColor: "hsl(222, 47%, 8%)",
+    border: "1px solid hsl(222, 30%, 16%)",
+    borderRadius: "8px",
+    color: "hsl(210, 40%, 96%)",
+  };
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-8 max-w-7xl mx-auto">
@@ -98,8 +118,17 @@ export default function Dashboard() {
         <p className="text-muted-foreground mt-2 italic text-sm max-w-lg">"{getQuote()}"</p>
       </motion.div>
 
+      {/* Score + Streak + Goal Row */}
+      <motion.div variants={item} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="glass-card-hover p-6 flex items-center justify-center">
+          <CircularProgress value={score} grade={grade} gradeColor={color} label={label} />
+        </div>
+        <StudyStreak streak={streak} />
+        <WeeklyGoal currentHours={weekStudyHours} />
+      </motion.div>
+
       {/* Stat Cards */}
-      <motion.div variants={item} className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <motion.div variants={item} className="grid grid-cols-3 gap-4">
         {stats.map((stat) => (
           <div key={stat.label} className="glass-card-hover p-5 text-center">
             <stat.icon className={`h-6 w-6 mx-auto mb-2 ${stat.color}`} />
@@ -116,18 +145,11 @@ export default function Dashboard() {
           <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={weekData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(222 30% 16%)" />
-                <XAxis dataKey="day" stroke="hsl(215 20% 55%)" fontSize={12} />
-                <YAxis stroke="hsl(215 20% 55%)" fontSize={12} allowDecimals={false} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "hsl(222 47% 8%)",
-                    border: "1px solid hsl(222 30% 16%)",
-                    borderRadius: "8px",
-                    color: "hsl(210 40% 96%)",
-                  }}
-                />
-                <Bar dataKey="tasks" fill="hsl(250 80% 65%)" radius={[4, 4, 0, 0]} />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(222, 30%, 16%)" />
+                <XAxis dataKey="day" stroke="hsl(215, 20%, 55%)" fontSize={12} />
+                <YAxis stroke="hsl(215, 20%, 55%)" fontSize={12} allowDecimals={false} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Bar dataKey="tasks" fill="hsl(250, 80%, 65%)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -138,18 +160,11 @@ export default function Dashboard() {
           <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={weekData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(222 30% 16%)" />
-                <XAxis dataKey="day" stroke="hsl(215 20% 55%)" fontSize={12} />
-                <YAxis stroke="hsl(215 20% 55%)" fontSize={12} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "hsl(222 47% 8%)",
-                    border: "1px solid hsl(222 30% 16%)",
-                    borderRadius: "8px",
-                    color: "hsl(210 40% 96%)",
-                  }}
-                />
-                <Line type="monotone" dataKey="hours" stroke="hsl(230 60% 55%)" strokeWidth={2} dot={{ fill: "hsl(230 60% 55%)" }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(222, 30%, 16%)" />
+                <XAxis dataKey="day" stroke="hsl(215, 20%, 55%)" fontSize={12} />
+                <YAxis stroke="hsl(215, 20%, 55%)" fontSize={12} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Line type="monotone" dataKey="hours" stroke="hsl(230, 60%, 55%)" strokeWidth={2} dot={{ fill: "hsl(230, 60%, 55%)" }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
