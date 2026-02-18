@@ -2,6 +2,7 @@ import { Outlet, Navigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
+import { Footer } from "./Footer";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function AppLayout() {
@@ -32,6 +33,7 @@ export function AppLayout() {
           <div className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
             <Outlet />
           </div>
+          <Footer />
         </main>
       </div>
     </SidebarProvider>

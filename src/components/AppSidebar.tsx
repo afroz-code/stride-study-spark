@@ -7,6 +7,7 @@ import {
   Settings,
   Zap,
   LogOut,
+  MessageSquare,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
@@ -28,6 +29,7 @@ const navItems = [
   { title: "Focus Mode", url: "/focus", icon: Timer },
   { title: "Analytics", url: "/analytics", icon: BarChart3 },
   { title: "Insights", url: "/insights", icon: Lightbulb },
+  { title: "Contact", url: "/contact", icon: MessageSquare },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
