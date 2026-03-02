@@ -1,15 +1,32 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useCreateStudySession, useStudySessions } from "@/hooks/useStudySessions";
 import { useToast } from "@/hooks/use-toast";
-import { Play, Pause, Square, Timer, Clock, RotateCcw } from "lucide-react";
+import { Play, Pause, Square, Brain, Repeat, RotateCcw } from "lucide-react";
+
+const modes = [
+  {
+    key: "freeform" as const,
+    label: "Deep Focus",
+    icon: Brain,
+    description: "Unlimited distraction-free study session.",
+  },
+  {
+    key: "pomodoro" as const,
+    label: "Focus Cycles",
+    icon: Repeat,
+    description: "Structured 25-minute focus sessions with short breaks.",
+  },
+];
 
 export default function FocusMode() {
   const [seconds, setSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [sessionType, setSessionType] = useState<"freeform" | "pomodoro">("freeform");
   const [pomodoroMinutes, setPomodoroMinutes] = useState(25);
+  const [cycleCount, setCycleCount] = useState(1);
   const startTimeRef = useRef<string | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const createSession = useCreateStudySession();
@@ -48,6 +65,7 @@ export default function FocusMode() {
   const reset = () => {
     setIsRunning(false);
     setSeconds(0);
+    setCycleCount(1);
     startTimeRef.current = null;
   };
 
@@ -56,6 +74,11 @@ export default function FocusMode() {
       intervalRef.current = setInterval(() => {
         setSeconds((s) => {
           if (sessionType === "pomodoro" && s + 1 >= targetSeconds) {
+            if (cycleCount < 4) {
+              setCycleCount((c) => c + 1);
+              toast({ title: `Cycle ${cycleCount} complete!`, description: "Take a 5 minute break." });
+              return 0;
+            }
             stop();
             return 0;
           }
@@ -64,7 +87,7 @@ export default function FocusMode() {
       }, 1000);
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [isRunning, sessionType, targetSeconds, stop]);
+  }, [isRunning, sessionType, targetSeconds, stop, cycleCount, toast]);
 
   const formatTime = (s: number) => {
     const h = Math.floor(s / 3600);
@@ -79,6 +102,8 @@ export default function FocusMode() {
   const todayMinutes = sessions?.filter((s) => s.started_at.startsWith(todayStr)).reduce((a, s) => a + s.duration_minutes, 0) ?? 0;
   const weekMinutes = sessions?.reduce((a, s) => a + s.duration_minutes, 0) ?? 0;
 
+  const activeMode = modes.find((m) => m.key === sessionType)!;
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-2xl mx-auto space-y-8">
       <div>
@@ -86,22 +111,30 @@ export default function FocusMode() {
         <p className="text-muted-foreground text-sm mt-1">Minimize distractions and track your study time</p>
       </div>
 
-      {/* Mode Toggle */}
-      <div className="flex gap-2">
-        <Button
-          variant={sessionType === "freeform" ? "default" : "outline"}
-          onClick={() => { setSessionType("freeform"); reset(); }}
-          className="gap-2"
-        >
-          <Timer className="h-4 w-4" /> Freeform
-        </Button>
-        <Button
-          variant={sessionType === "pomodoro" ? "default" : "outline"}
-          onClick={() => { setSessionType("pomodoro"); reset(); }}
-          className="gap-2"
-        >
-          <Clock className="h-4 w-4" /> Pomodoro
-        </Button>
+      {/* Mode Selector */}
+      <div className="grid grid-cols-2 gap-3">
+        {modes.map((mode) => {
+          const isActive = sessionType === mode.key;
+          return (
+            <button
+              key={mode.key}
+              onClick={() => { setSessionType(mode.key); reset(); }}
+              className={`relative p-4 rounded-xl border text-left transition-all duration-300 group
+                ${isActive
+                  ? "border-primary/60 bg-primary/10 shadow-[0_0_20px_hsl(250_80%_65%/0.15)] scale-[1.02]"
+                  : "border-border/50 bg-card/60 hover:border-primary/30 hover:bg-card/80 hover:scale-[1.01]"
+                }`}
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                <mode.icon className={`h-4 w-4 transition-colors ${isActive ? "text-primary" : "text-muted-foreground group-hover:text-primary/70"}`} />
+                <span className={`font-display font-semibold text-sm ${isActive ? "text-foreground" : "text-muted-foreground"}`}>
+                  {mode.label}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">{mode.description}</p>
+            </button>
+          );
+        })}
       </div>
 
       {sessionType === "pomodoro" && (
@@ -127,6 +160,24 @@ export default function FocusMode() {
             style={{ width: `${progress}%` }}
           />
         )}
+
+        {/* Active Mode Label */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={sessionType}
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.3 }}
+            className="mb-4"
+          >
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20">
+              <activeMode.icon className="h-3.5 w-3.5 text-primary" />
+              <span className="text-xs font-medium text-primary">{activeMode.label} Active</span>
+            </div>
+          </motion.div>
+        </AnimatePresence>
+
         <motion.p
           key={seconds}
           className="text-7xl md:text-8xl font-display font-bold tabular-nums tracking-tight"
@@ -134,6 +185,15 @@ export default function FocusMode() {
         >
           {sessionType === "pomodoro" ? formatTime(targetSeconds - seconds) : formatTime(seconds)}
         </motion.p>
+
+        {/* Pomodoro helper text */}
+        {sessionType === "pomodoro" && (
+          <div className="mt-3 space-y-1">
+            <p className="text-xs text-muted-foreground">{pomodoroMinutes} min Focus • 5 min Break</p>
+            <p className="text-xs text-primary/70 font-medium">Cycle {cycleCount} of 4</p>
+          </div>
+        )}
+
         <p className="text-muted-foreground mt-4 text-sm">
           {isRunning ? "Stay focused..." : seconds > 0 ? "Paused" : "Ready to start"}
         </p>
@@ -180,7 +240,9 @@ export default function FocusMode() {
             <div key={s.id} className="flex items-center justify-between py-2 border-b border-border/30 last:border-0">
               <span className="text-sm">{new Date(s.started_at).toLocaleDateString()} at {new Date(s.started_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
               <div className="flex items-center gap-2">
-                <Badge className="text-xs" variant="outline">{s.session_type}</Badge>
+                <Badge variant="outline" className="text-xs">
+                  {s.session_type === "freeform" ? "Deep Focus" : "Focus Cycle"}
+                </Badge>
                 <span className="text-sm font-medium">{s.duration_minutes}m</span>
               </div>
             </div>
@@ -188,13 +250,5 @@ export default function FocusMode() {
         </div>
       </div>
     </motion.div>
-  );
-}
-
-function Badge({ children, className, variant }: { children: React.ReactNode; className?: string; variant?: string }) {
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border ${variant === "outline" ? "border-border/50" : "bg-primary/20 border-primary/30"} ${className}`}>
-      {children}
-    </span>
   );
 }
