@@ -239,7 +239,8 @@ export default function Planner() {
                   </Button>
                 </div>
               </motion.div>
-            ))
+              );
+            })
           )}
         </AnimatePresence>
       </div>
