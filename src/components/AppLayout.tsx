@@ -37,6 +37,7 @@ export function AppLayout() {
             <Outlet />
           </div>
           <Footer />
+          <IdleReminder />
         </main>
       </div>
     </SidebarProvider>
