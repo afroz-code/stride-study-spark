@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useCreateStudySession, useStudySessions } from "@/hooks/useStudySessions";
 import { useToast } from "@/hooks/use-toast";
-import { Play, Pause, Square, Brain, Repeat, RotateCcw } from "lucide-react";
+import { calculateStreak } from "@/components/StudyStreak";
+import { Play, Pause, Square, Brain, Repeat, RotateCcw, Flame, Clock, Trophy, Volume2, VolumeX } from "lucide-react";
 
 const modes = [
   {
@@ -21,14 +22,21 @@ const modes = [
   },
 ];
 
+const ambientSounds = [
+  { label: "Rain", url: "https://cdn.pixabay.com/audio/2022/05/16/audio_460ac1fef5.mp3" },
+  { label: "Cafe", url: "https://cdn.pixabay.com/audio/2024/11/04/audio_7fb8e31d79.mp3" },
+];
+
 export default function FocusMode() {
   const [seconds, setSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [sessionType, setSessionType] = useState<"freeform" | "pomodoro">("freeform");
   const [pomodoroMinutes, setPomodoroMinutes] = useState(25);
   const [cycleCount, setCycleCount] = useState(1);
+  const [soundEnabled, setSoundEnabled] = useState(false);
   const startTimeRef = useRef<string | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const createSession = useCreateStudySession();
   const { data: sessions } = useStudySessions();
   const { toast } = useToast();
@@ -89,6 +97,21 @@ export default function FocusMode() {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [isRunning, sessionType, targetSeconds, stop, cycleCount, toast]);
 
+  // Ambient sound
+  useEffect(() => {
+    if (soundEnabled && isRunning) {
+      if (!audioRef.current) {
+        audioRef.current = new Audio(ambientSounds[0].url);
+        audioRef.current.loop = true;
+        audioRef.current.volume = 0.3;
+      }
+      audioRef.current.play().catch(() => {});
+    } else {
+      audioRef.current?.pause();
+    }
+    return () => { audioRef.current?.pause(); };
+  }, [soundEnabled, isRunning]);
+
   const formatTime = (s: number) => {
     const h = Math.floor(s / 3600);
     const m = Math.floor((s % 3600) / 60);
@@ -99,156 +122,201 @@ export default function FocusMode() {
 
   const progress = sessionType === "pomodoro" ? (seconds / targetSeconds) * 100 : 0;
   const todayStr = new Date().toISOString().split("T")[0];
-  const todayMinutes = sessions?.filter((s) => s.started_at.startsWith(todayStr)).reduce((a, s) => a + s.duration_minutes, 0) ?? 0;
+  const todaySessions = sessions?.filter((s) => s.started_at.startsWith(todayStr)) ?? [];
+  const todayMinutes = todaySessions.reduce((a, s) => a + s.duration_minutes, 0);
+  const longestSession = todaySessions.length > 0 ? Math.max(...todaySessions.map((s) => s.duration_minutes)) : 0;
+  const streak = calculateStreak(sessions?.map((s) => s.started_at) ?? []);
   const weekMinutes = sessions?.reduce((a, s) => a + s.duration_minutes, 0) ?? 0;
 
   const activeMode = modes.find((m) => m.key === sessionType)!;
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-2xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-3xl font-display font-bold">Focus Mode</h1>
-        <p className="text-muted-foreground text-sm mt-1">Minimize distractions and track your study time</p>
-      </div>
-
-      {/* Mode Selector */}
-      <div className="grid grid-cols-2 gap-3">
-        {modes.map((mode) => {
-          const isActive = sessionType === mode.key;
-          return (
-            <button
-              key={mode.key}
-              onClick={() => { setSessionType(mode.key); reset(); }}
-              className={`relative p-4 rounded-xl border text-left transition-all duration-300 group
-                ${isActive
-                  ? "border-primary/60 bg-primary/10 shadow-[0_0_20px_hsl(250_80%_65%/0.15)] scale-[1.02]"
-                  : "border-border/50 bg-card/60 hover:border-primary/30 hover:bg-card/80 hover:scale-[1.01]"
-                }`}
-            >
-              <div className="flex items-center gap-2 mb-1.5">
-                <mode.icon className={`h-4 w-4 transition-colors ${isActive ? "text-primary" : "text-muted-foreground group-hover:text-primary/70"}`} />
-                <span className={`font-display font-semibold text-sm ${isActive ? "text-foreground" : "text-muted-foreground"}`}>
-                  {mode.label}
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">{mode.description}</p>
-            </button>
-          );
-        })}
-      </div>
-
-      {sessionType === "pomodoro" && (
-        <div className="flex gap-2">
-          {[15, 25, 45, 60].map((m) => (
-            <Button
-              key={m}
-              variant={pomodoroMinutes === m ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => { setPomodoroMinutes(m); reset(); }}
-            >
-              {m}m
-            </Button>
-          ))}
-        </div>
-      )}
-
-      {/* Timer Display */}
-      <div className="glass-card p-12 text-center relative overflow-hidden">
-        {sessionType === "pomodoro" && (
-          <div
-            className="absolute bottom-0 left-0 h-1 bg-primary transition-all duration-1000"
-            style={{ width: `${progress}%` }}
+    <>
+      {/* Ambient overlay */}
+      <AnimatePresence>
+        {isRunning && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.8 }}
+            className="fixed inset-0 bg-background/40 backdrop-blur-[2px] z-10 pointer-events-none"
           />
         )}
+      </AnimatePresence>
 
-        {/* Active Mode Label */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={sessionType}
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={{ duration: 0.3 }}
-            className="mb-4"
-          >
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20">
-              <activeMode.icon className="h-3.5 w-3.5 text-primary" />
-              <span className="text-xs font-medium text-primary">{activeMode.label} Active</span>
-            </div>
-          </motion.div>
-        </AnimatePresence>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-2xl mx-auto space-y-8 relative z-20">
+        <div>
+          <h1 className="text-3xl font-display font-bold">Focus Mode</h1>
+          <p className="text-muted-foreground text-sm mt-1">Minimize distractions and track your study time</p>
+        </div>
 
-        <motion.p
-          key={seconds}
-          className="text-7xl md:text-8xl font-display font-bold tabular-nums tracking-tight"
-          initial={false}
-        >
-          {sessionType === "pomodoro" ? formatTime(targetSeconds - seconds) : formatTime(seconds)}
-        </motion.p>
+        {/* Focus Analytics */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="glass-card p-4 text-center">
+            <Clock className="h-4 w-4 mx-auto mb-1.5 text-info" />
+            <p className="text-xl font-display font-bold">{(todayMinutes / 60).toFixed(1)}h</p>
+            <p className="text-[10px] text-muted-foreground">Today's Focus</p>
+          </div>
+          <div className="glass-card p-4 text-center">
+            <Trophy className="h-4 w-4 mx-auto mb-1.5 text-warning" />
+            <p className="text-xl font-display font-bold">{longestSession}m</p>
+            <p className="text-[10px] text-muted-foreground">Longest Session</p>
+          </div>
+          <div className="glass-card p-4 text-center">
+            <Flame className={`h-4 w-4 mx-auto mb-1.5 ${streak >= 3 ? "text-destructive animate-pulse" : "text-muted-foreground"}`} />
+            <p className="text-xl font-display font-bold">{streak}</p>
+            <p className="text-[10px] text-muted-foreground">Day Streak 🔥</p>
+          </div>
+        </div>
 
-        {/* Pomodoro helper text */}
+        {/* Mode Selector */}
+        <div className="grid grid-cols-2 gap-3">
+          {modes.map((mode) => {
+            const isActive = sessionType === mode.key;
+            return (
+              <button
+                key={mode.key}
+                onClick={() => { setSessionType(mode.key); reset(); }}
+                className={`relative p-4 rounded-xl border text-left transition-all duration-300 group
+                  ${isActive
+                    ? "border-primary/60 bg-primary/10 shadow-[0_0_20px_hsl(250_80%_65%/0.15)] scale-[1.02]"
+                    : "border-border/50 bg-card/60 hover:border-primary/30 hover:bg-card/80 hover:scale-[1.01]"
+                  }`}
+              >
+                <div className="flex items-center gap-2 mb-1.5">
+                  <mode.icon className={`h-4 w-4 transition-colors ${isActive ? "text-primary" : "text-muted-foreground group-hover:text-primary/70"}`} />
+                  <span className={`font-display font-semibold text-sm ${isActive ? "text-foreground" : "text-muted-foreground"}`}>
+                    {mode.label}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">{mode.description}</p>
+              </button>
+            );
+          })}
+        </div>
+
         {sessionType === "pomodoro" && (
-          <div className="mt-3 space-y-1">
-            <p className="text-xs text-muted-foreground">{pomodoroMinutes} min Focus • 5 min Break</p>
-            <p className="text-xs text-primary/70 font-medium">Cycle {cycleCount} of 4</p>
+          <div className="flex gap-2">
+            {[15, 25, 45, 60].map((m) => (
+              <Button
+                key={m}
+                variant={pomodoroMinutes === m ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => { setPomodoroMinutes(m); reset(); }}
+              >
+                {m}m
+              </Button>
+            ))}
           </div>
         )}
 
-        <p className="text-muted-foreground mt-4 text-sm">
-          {isRunning ? "Stay focused..." : seconds > 0 ? "Paused" : "Ready to start"}
-        </p>
-        <div className="flex items-center justify-center gap-3 mt-8">
-          {!isRunning ? (
-            <Button size="lg" onClick={start} className="gap-2 px-8">
-              <Play className="h-5 w-5" /> {seconds > 0 ? "Resume" : "Start"}
-            </Button>
-          ) : (
-            <Button size="lg" variant="outline" onClick={pause} className="gap-2 px-8">
-              <Pause className="h-5 w-5" /> Pause
-            </Button>
+        {/* Timer Display */}
+        <div className={`glass-card p-12 text-center relative overflow-hidden transition-all duration-500 ${isRunning ? "glow-primary" : ""}`}>
+          {sessionType === "pomodoro" && (
+            <div
+              className="absolute bottom-0 left-0 h-1 bg-primary transition-all duration-1000"
+              style={{ width: `${progress}%` }}
+            />
           )}
-          {seconds > 0 && (
-            <>
-              <Button size="lg" variant="destructive" onClick={stop} className="gap-2">
-                <Square className="h-4 w-4" /> Stop & Save
-              </Button>
-              <Button size="lg" variant="ghost" onClick={reset}>
-                <RotateCcw className="h-4 w-4" />
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="glass-card p-5 text-center">
-          <p className="text-2xl font-display font-bold">{(todayMinutes / 60).toFixed(1)}h</p>
-          <p className="text-xs text-muted-foreground mt-1">Today's Study Time</p>
-        </div>
-        <div className="glass-card p-5 text-center">
-          <p className="text-2xl font-display font-bold">{(weekMinutes / 60).toFixed(1)}h</p>
-          <p className="text-xs text-muted-foreground mt-1">Total Study Time</p>
-        </div>
-      </div>
-
-      {/* Recent Sessions */}
-      <div className="glass-card p-6">
-        <h3 className="font-display font-semibold mb-4">Recent Sessions</h3>
-        <div className="space-y-2 max-h-48 overflow-auto">
-          {sessions?.slice(0, 10).map((s) => (
-            <div key={s.id} className="flex items-center justify-between py-2 border-b border-border/30 last:border-0">
-              <span className="text-sm">{new Date(s.started_at).toLocaleDateString()} at {new Date(s.started_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs">
-                  {s.session_type === "freeform" ? "Deep Focus" : "Focus Cycle"}
-                </Badge>
-                <span className="text-sm font-medium">{s.duration_minutes}m</span>
+          {/* Active Mode Label */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={sessionType}
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: 0.3 }}
+              className="mb-4"
+            >
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20">
+                <activeMode.icon className="h-3.5 w-3.5 text-primary" />
+                <span className="text-xs font-medium text-primary">{activeMode.label} Active</span>
               </div>
+            </motion.div>
+          </AnimatePresence>
+
+          <motion.p
+            key={seconds}
+            className="text-7xl md:text-8xl font-display font-bold tabular-nums tracking-tight"
+            initial={false}
+          >
+            {sessionType === "pomodoro" ? formatTime(targetSeconds - seconds) : formatTime(seconds)}
+          </motion.p>
+
+          {/* Pomodoro helper text */}
+          {sessionType === "pomodoro" && (
+            <div className="mt-3 space-y-1">
+              <p className="text-xs text-muted-foreground">{pomodoroMinutes} min Focus • 5 min Break</p>
+              <p className="text-xs text-primary/70 font-medium">Cycle {cycleCount} of 4</p>
             </div>
-          )) ?? <p className="text-muted-foreground text-sm">No sessions yet</p>}
+          )}
+
+          <p className="text-muted-foreground mt-4 text-sm">
+            {isRunning ? "Stay focused..." : seconds > 0 ? "Paused" : "Ready to start"}
+          </p>
+          <div className="flex items-center justify-center gap-3 mt-8">
+            {!isRunning ? (
+              <Button size="lg" onClick={start} className="gap-2 px-8">
+                <Play className="h-5 w-5" /> {seconds > 0 ? "Resume" : "Start"}
+              </Button>
+            ) : (
+              <Button size="lg" variant="outline" onClick={pause} className="gap-2 px-8">
+                <Pause className="h-5 w-5" /> Pause
+              </Button>
+            )}
+            {seconds > 0 && (
+              <>
+                <Button size="lg" variant="destructive" onClick={stop} className="gap-2">
+                  <Square className="h-4 w-4" /> Stop & Save
+                </Button>
+                <Button size="lg" variant="ghost" onClick={reset}>
+                  <RotateCcw className="h-4 w-4" />
+                </Button>
+              </>
+            )}
+            <Button
+              size="lg"
+              variant="ghost"
+              onClick={() => setSoundEnabled(!soundEnabled)}
+              className="gap-1"
+            >
+              {soundEnabled ? <Volume2 className="h-4 w-4 text-primary" /> : <VolumeX className="h-4 w-4" />}
+            </Button>
+          </div>
         </div>
-      </div>
-    </motion.div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="glass-card p-5 text-center">
+            <p className="text-2xl font-display font-bold">{(todayMinutes / 60).toFixed(1)}h</p>
+            <p className="text-xs text-muted-foreground mt-1">Today's Study Time</p>
+          </div>
+          <div className="glass-card p-5 text-center">
+            <p className="text-2xl font-display font-bold">{(weekMinutes / 60).toFixed(1)}h</p>
+            <p className="text-xs text-muted-foreground mt-1">Total Study Time</p>
+          </div>
+        </div>
+
+        {/* Recent Sessions */}
+        <div className="glass-card p-6">
+          <h3 className="font-display font-semibold mb-4">Recent Sessions</h3>
+          <div className="space-y-2 max-h-48 overflow-auto">
+            {sessions?.slice(0, 10).map((s) => (
+              <div key={s.id} className="flex items-center justify-between py-2 border-b border-border/30 last:border-0">
+                <span className="text-sm">{new Date(s.started_at).toLocaleDateString()} at {new Date(s.started_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs">
+                    {s.session_type === "freeform" ? "Deep Focus" : "Focus Cycle"}
+                  </Badge>
+                  <span className="text-sm font-medium">{s.duration_minutes}m</span>
+                </div>
+              </div>
+            )) ?? <p className="text-muted-foreground text-sm">No sessions yet</p>}
+          </div>
+        </div>
+      </motion.div>
+    </>
   );
 }

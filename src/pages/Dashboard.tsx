@@ -6,6 +6,7 @@ import { useStudySessions } from "@/hooks/useStudySessions";
 import { CircularProgress, getProductivityScore, getGradeInfo } from "@/components/CircularProgress";
 import { StudyStreak, calculateStreak } from "@/components/StudyStreak";
 import { WeeklyGoal } from "@/components/WeeklyGoal";
+import { ActivityHeatmap } from "@/components/ActivityHeatmap";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -346,6 +347,11 @@ export default function Dashboard() {
           </div>
         </motion.div>
       </div>
+
+      {/* Activity Heatmap */}
+      <motion.div variants={item}>
+        <ActivityHeatmap />
+      </motion.div>
 
       {/* Floating Quick Add Button */}
       <motion.button

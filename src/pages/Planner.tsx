@@ -190,14 +190,16 @@ export default function Planner() {
               <p>No tasks yet. Create your first task to get started!</p>
             </div>
           ) : (
-            filteredTasks.map((task) => (
+            filteredTasks.map((task) => {
+              const isOverdue = task.deadline && task.deadline < new Date().toISOString().split("T")[0] && task.status !== "completed";
+              return (
               <motion.div
                 key={task.id}
                 layout
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, x: -20 }}
-                className={`glass-card-hover p-4 flex items-center gap-4 ${task.status === "completed" ? "opacity-60" : ""}`}
+                className={`glass-card-hover p-4 flex items-center gap-4 ${task.status === "completed" ? "opacity-60" : ""} ${isOverdue ? "border-destructive/40 bg-destructive/5" : ""}`}
               >
                 <button
                   onClick={() => updateTask.mutate({ id: task.id, status: task.status === "completed" ? "pending" : "completed" })}
@@ -237,7 +239,8 @@ export default function Planner() {
                   </Button>
                 </div>
               </motion.div>
-            ))
+              );
+            })
           )}
         </AnimatePresence>
       </div>
